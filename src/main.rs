@@ -38,8 +38,8 @@ fn main() {
     let (major, minor, patch) = semver(tags);
     let current_version = format!("{}.{}.{}", major, minor, patch);
     match matches.value_of("version").unwrap() {
-        "major" => println!("{} --> {}.{}.{}", current_version, major + 1, minor, patch),
-        "minor" => println!("{} --> {}.{}.{}", current_version, major, minor + 1, patch),
+        "major" => println!("{} --> {}.{}.{}", current_version, major + 1, 0, 0),
+        "minor" => println!("{} --> {}.{}.{}", current_version, major, minor + 1, 0),
         "patch" => println!("{} --> {}.{}.{}", current_version, major, minor, patch + 1),
         _ => (),
     }
