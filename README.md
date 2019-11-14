@@ -9,9 +9,13 @@ Will print current version if any and bumped version
 How to use it?
 ==============
 
+To install:
+
+    cargo install gbump
+
 You can copy `gbump` to `/usr/local/bin/gbump` or somewhere available in your path
 
-Available options are: patch, minor, major. (defaults to patch)
+Available options are: `patch`, `minor`, `major`. (defaults to patch)
 
 For example if current version tag is `0.1.1`:
 
