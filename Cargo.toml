@@ -1,0 +1,21 @@
+[package]
+name = "gbump"
+version = "0.1.0"
+authors = ["Nicolas Embriz <nbari@tequila.io>"]
+description = "Git tag semantic version bumper"
+documentation = "https://github.com/nbari/gbump"
+homepage = "https://github.com/nbari/gbump"
+repository = "https://github.com/nbari/gbump"
+readme = "README.md"
+keywords = ["git", "semver", "bump", "version", "tag"]
+categories = ["command-line-utilities", "os"]
+license-file = "LICENSE"
+edition = "2018"
+
+[badges]
+travis-ci = { repository = "nbari/gbump", branch = "master" }
+
+[dependencies]
+clap = "2.33.0"
+git2 = "0.10"
+regex = "1.3.1"
