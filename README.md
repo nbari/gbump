@@ -20,6 +20,10 @@ You can copy `gbump` to `/usr/local/bin/gbump` or somewhere available in your pa
 
 Available options are: `patch`, `minor`, `major`. (defaults to patch)
 
+More type:
+
+    $ gbump -h
+
 For example if current version tag is `0.1.1`:
 
 Using `patch` will bump `0.1.1` to `0.1.2`
@@ -36,3 +40,10 @@ Using `major` will bump `0.1.1` to `1.0.0`
 
     $ gbump major
     0.1.1 --> 1.0.0
+
+## Quiet mode
+
+If just want to get the next `semver` use option `-q`, for example:
+
+    $ gbump major -q
+    1.0.0

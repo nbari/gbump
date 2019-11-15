@@ -18,34 +18,66 @@ fn main() {
                 .possible_value("minor")
                 .possible_value("patch"),
         )
+        .arg(
+            Arg::with_name("quiet")
+                .required(false)
+                .takes_value(false)
+                .long("quiet")
+                .short("q")
+                .help("Prints only the next SemVer not the current one"),
+        )
         .get_matches();
 
     let repo = match env::current_dir() {
         Ok(path) => match Repository::discover(path) {
             Ok(repo) => repo,
             _ => {
-                eprintln!("not in a git repository");
+                eprintln!("Not in a git repository");
                 process::exit(1);
             }
         },
-        _ => {
-            eprintln!("could not get current_dir");
+        e => {
+            eprintln!("Could not get current_dir: {:?}", e);
             process::exit(1);
         }
     };
 
-    let tags = get_tags(repo).unwrap();
-    let (major, minor, patch) = semver(tags);
-    let current_version = format!("{}.{}.{}", major, minor, patch);
-    match matches.value_of("version").unwrap() {
-        "major" => println!("{} --> {}.{}.{}", current_version, major + 1, 0, 0),
-        "minor" => println!("{} --> {}.{}.{}", current_version, major, minor + 1, 0),
-        "patch" => println!("{} --> {}.{}.{}", current_version, major, minor, patch + 1),
-        _ => (),
-    }
+    // get tags
+    let (major, minor, patch) = match tags(repo) {
+        Ok(tags) => semver(tags),
+        _ => {
+            eprintln!("Could not get tags from repo: git tag -l");
+            process::exit(1);
+        }
+    };
+
+    let semver = run(
+        matches.is_present("quiet"),
+        matches.value_of("version").unwrap(),
+        major,
+        minor,
+        patch,
+    );
+    println!("{}", semver);
 }
 
-fn get_tags(repo: Repository) -> Result<BTreeSet<String>, git2::Error> {
+// return string containing new semver and optional the current semver
+fn run(quiet: bool, version: &str, major: usize, minor: usize, patch: usize) -> String {
+    let mut semver = String::new();
+    if !quiet {
+        semver.push_str(format!("{}.{}.{} --> ", major, minor, patch).as_str());
+    };
+    match version {
+        "major" => semver.push_str(format!("{}.{}.{}", major + 1, 0, 0).as_str()),
+        "minor" => semver.push_str(format!("{}.{}.{}", major, minor + 1, 0).as_str()),
+        "patch" => semver.push_str(format!("{}.{}.{}", major, minor, patch + 1).as_str()),
+        _ => (),
+    }
+    semver
+}
+
+// return tags found in the repository
+fn tags(repo: Repository) -> Result<BTreeSet<String>, git2::Error> {
     let mut tags = BTreeSet::new();
     for name in repo.tag_names(None)?.iter() {
         if let Some(tag) = name {
@@ -55,6 +87,7 @@ fn get_tags(repo: Repository) -> Result<BTreeSet<String>, git2::Error> {
     Ok(tags)
 }
 
+// return current "max" semver
 fn semver(tags: BTreeSet<String>) -> (usize, usize, usize) {
     let re = Regex::new(SEMVER_RX).unwrap();
     let (mut major, mut minor, mut patch) = (0, 0, 0);
@@ -80,7 +113,7 @@ fn semver(tags: BTreeSet<String>) -> (usize, usize, usize) {
 
 #[cfg(test)]
 mod tests {
-    use crate::semver;
+    use crate::{run, semver};
     use std::collections::BTreeSet;
 
     #[test]
@@ -92,7 +125,6 @@ mod tests {
         tags.insert("2.7.2".to_string());
         tags.insert("0.24.0".to_string());
         let (major, minor, patch) = semver(tags);
-        println!("{}.{}.{}", major, minor, patch);
         assert_eq!(major, 3);
         assert_eq!(minor, 7);
         assert_eq!(patch, 0);
@@ -111,7 +143,6 @@ mod tests {
         tags.insert("0.23.0".to_string());
         tags.insert("0.24.0".to_string());
         let (major, minor, patch) = semver(tags);
-        println!("{}.{}.{}", major, minor, patch);
         assert_eq!(major, 0);
         assert_eq!(minor, 24);
         assert_eq!(patch, 0);
@@ -131,7 +162,6 @@ mod tests {
         tags.insert("0.24.0".to_string());
         tags.insert("0.99.100".to_string());
         let (major, minor, patch) = semver(tags);
-        println!("{}.{}.{}", major, minor, patch);
         assert_eq!(major, 0);
         assert_eq!(minor, 99);
         assert_eq!(patch, 100);
@@ -179,9 +209,24 @@ mod tests {
         tags.insert("1.1.1  1.1".to_string());
         tags.insert("12.1.0---FreeBSD.12.1-RELEASE".to_string());
         let (major, minor, patch) = semver(tags);
-        println!("{}.{}.{}", major, minor, patch);
         assert_eq!(major, 12);
         assert_eq!(minor, 1);
         assert_eq!(patch, 0);
+    }
+
+    #[test]
+    fn test_run() {
+        assert_eq!(run(true, "patch", 0, 0, 0), "0.0.1");
+        assert_eq!(run(false, "patch", 0, 0, 0), "0.0.0 --> 0.0.1");
+        assert_eq!(run(true, "minor", 0, 0, 0), "0.1.0");
+        assert_eq!(run(false, "minor", 0, 0, 0), "0.0.0 --> 0.1.0");
+        assert_eq!(run(true, "major", 0, 0, 0), "1.0.0");
+        assert_eq!(run(false, "major", 0, 0, 0), "0.0.0 --> 1.0.0");
+        assert_eq!(run(true, "patch", 1, 2, 3), "1.2.4");
+        assert_eq!(run(false, "patch", 1, 2, 3), "1.2.3 --> 1.2.4");
+        assert_eq!(run(true, "minor", 1, 2, 3), "1.3.0");
+        assert_eq!(run(false, "minor", 1, 2, 3), "1.2.3 --> 1.3.0");
+        assert_eq!(run(true, "major", 1, 2, 3), "2.0.0");
+        assert_eq!(run(false, "major", 1, 2, 3), "1.2.3 --> 2.0.0");
     }
 }
