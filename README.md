@@ -45,5 +45,5 @@ Using `major` will bump `0.1.1` to `1.0.0`
 
 If only need the next `semver`,  use option `-q`. for example:
 
-    $ gbump major -q
+    $ gbump -q major
     1.0.0
