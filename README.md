@@ -18,11 +18,11 @@ To install:
 
 You can copy `gbump` to `/usr/local/bin/gbump` or somewhere available in your path
 
-Available options are: `patch`, `minor`, `major`. (defaults to patch)
-
-More type:
+For usage type:
 
     $ gbump -h
+
+`SemVer` options are: `patch`, `minor`, `major`. (defaults to patch)
 
 For example if current version tag is `0.1.1`:
 
@@ -47,3 +47,10 @@ If only need the next `semver`,  use option `-q`. for example:
 
     $ gbump -q major
     1.0.0
+
+## --tag (git tag -a X.Y.Z -m "X.Y.Z")
+
+To create a git tag using the latest bump use the flag `-t`:
+
+     $ gbump -t minor
+     Tag: 0.2.0 created: 5b1eca044a538fd2f74c4f043f28ca4a46b8f7b7

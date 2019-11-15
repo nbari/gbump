@@ -26,6 +26,14 @@ fn main() {
                 .short("q")
                 .help("Prints only the next SemVer not the current one"),
         )
+        .arg(
+            Arg::with_name("tag")
+                .required(false)
+                .takes_value(false)
+                .long("tag")
+                .short("t")
+                .help("Create a semver git tag"),
+        )
         .get_matches();
 
     let repo = match env::current_dir() {
@@ -43,7 +51,7 @@ fn main() {
     };
 
     // get tags
-    let (major, minor, patch) = match tags(repo) {
+    let (major, minor, patch) = match tags(&repo) {
         Ok(tags) => semver(tags),
         _ => {
             eprintln!("Could not get tags from repo: git tag -l");
@@ -51,33 +59,45 @@ fn main() {
         }
     };
 
-    let semver = run(
-        matches.is_present("quiet"),
-        matches.value_of("version").unwrap(),
-        major,
-        minor,
-        patch,
-    );
+    let mut semver = String::new();
+    if !matches.is_present("quiet") {
+        semver.push_str(format!("{}.{}.{} --> ", major, minor, patch).as_str());
+    };
+
+    let bump = bump(matches.value_of("version").unwrap(), major, minor, patch);
+    semver.push_str(&bump);
     println!("{}", semver);
+
+    if matches.is_present("tag") {
+        match tag(&repo, bump.as_str(), bump.as_str()) {
+            Ok(n) => println!("Tag: {} created: {}", bump, n),
+            Err(e) => {
+                eprintln!("Could not create tag: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+}
+
+// create a tag: git tag -a bump -m bump
+fn tag(repo: &Repository, tag: &str, message: &str) -> Result<git2::Oid, git2::Error> {
+    let obj = repo.revparse_single("HEAD")?;
+    let sig = repo.signature()?;
+    repo.tag(tag, &obj, &sig, message, false)
 }
 
 // return string containing new semver and optional the current semver
-fn run(quiet: bool, version: &str, major: usize, minor: usize, patch: usize) -> String {
-    let mut semver = String::new();
-    if !quiet {
-        semver.push_str(format!("{}.{}.{} --> ", major, minor, patch).as_str());
-    };
+fn bump(version: &str, major: usize, minor: usize, patch: usize) -> String {
     match version {
-        "major" => semver.push_str(format!("{}.{}.{}", major + 1, 0, 0).as_str()),
-        "minor" => semver.push_str(format!("{}.{}.{}", major, minor + 1, 0).as_str()),
-        "patch" => semver.push_str(format!("{}.{}.{}", major, minor, patch + 1).as_str()),
-        _ => (),
+        "major" => format!("{}.{}.{}", major + 1, 0, 0),
+        "minor" => format!("{}.{}.{}", major, minor + 1, 0),
+        "patch" => format!("{}.{}.{}", major, minor, patch + 1),
+        _ => String::new(),
     }
-    semver
 }
 
 // return tags found in the repository
-fn tags(repo: Repository) -> Result<BTreeSet<String>, git2::Error> {
+fn tags(repo: &Repository) -> Result<BTreeSet<String>, git2::Error> {
     let mut tags = BTreeSet::new();
     for name in repo.tag_names(None)?.iter() {
         if let Some(tag) = name {
@@ -113,7 +133,7 @@ fn semver(tags: BTreeSet<String>) -> (usize, usize, usize) {
 
 #[cfg(test)]
 mod tests {
-    use crate::{run, semver};
+    use crate::{bump, semver};
     use std::collections::BTreeSet;
 
     #[test]
@@ -215,18 +235,12 @@ mod tests {
     }
 
     #[test]
-    fn test_run() {
-        assert_eq!(run(true, "patch", 0, 0, 0), "0.0.1");
-        assert_eq!(run(false, "patch", 0, 0, 0), "0.0.0 --> 0.0.1");
-        assert_eq!(run(true, "minor", 0, 0, 0), "0.1.0");
-        assert_eq!(run(false, "minor", 0, 0, 0), "0.0.0 --> 0.1.0");
-        assert_eq!(run(true, "major", 0, 0, 0), "1.0.0");
-        assert_eq!(run(false, "major", 0, 0, 0), "0.0.0 --> 1.0.0");
-        assert_eq!(run(true, "patch", 1, 2, 3), "1.2.4");
-        assert_eq!(run(false, "patch", 1, 2, 3), "1.2.3 --> 1.2.4");
-        assert_eq!(run(true, "minor", 1, 2, 3), "1.3.0");
-        assert_eq!(run(false, "minor", 1, 2, 3), "1.2.3 --> 1.3.0");
-        assert_eq!(run(true, "major", 1, 2, 3), "2.0.0");
-        assert_eq!(run(false, "major", 1, 2, 3), "1.2.3 --> 2.0.0");
+    fn test_bump() {
+        assert_eq!(bump("patch", 0, 0, 0), "0.0.1");
+        assert_eq!(bump("minor", 0, 0, 0), "0.1.0");
+        assert_eq!(bump("major", 0, 0, 0), "1.0.0");
+        assert_eq!(bump("patch", 1, 2, 3), "1.2.4");
+        assert_eq!(bump("minor", 1, 2, 3), "1.3.0");
+        assert_eq!(bump("major", 1, 2, 3), "2.0.0");
     }
 }
