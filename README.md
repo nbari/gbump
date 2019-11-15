@@ -43,7 +43,7 @@ Using `major` will bump `0.1.1` to `1.0.0`
 
 ## Quiet mode
 
-If just want to get the next `semver` use option `-q`, for example:
+If just want to only get the next `semver` use option `-q`, for example:
 
     $ gbump major -q
     1.0.0

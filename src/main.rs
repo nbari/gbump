@@ -7,7 +7,7 @@ const SEMVER_RX: &str = r"(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patc
 
 fn main() {
     // cli options default to patch
-    let matches = App::new("bump")
+    let matches = App::new("gbump")
         .version(env!("CARGO_PKG_VERSION"))
         .arg(
             Arg::with_name("version")
