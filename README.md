@@ -7,7 +7,9 @@ Git tag semantic version bumper
 What does it do?
 ================
 
-Will print current version if any and bumped version
+Will print current version if any and bumped version, if option `-q` (quiet) is
+used it will only print the bumped version, if option `-t` (tag) then it will
+create a git tag with the bumped version "git tag -a "x.y.z" -m "x.y.z"
 
 How to use it?
 ==============

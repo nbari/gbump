@@ -36,6 +36,7 @@ fn main() {
         )
         .get_matches();
 
+    // check if we are in a git repository
     let repo = match env::current_dir() {
         Ok(path) => match Repository::discover(path) {
             Ok(repo) => repo,
@@ -50,7 +51,7 @@ fn main() {
         }
     };
 
-    // get tags
+    // find maximum/latest semver
     let (major, minor, patch) = match tags(&repo) {
         Ok(tags) => semver(tags),
         _ => {
@@ -59,6 +60,7 @@ fn main() {
         }
     };
 
+    // prepare the output
     let mut semver = String::new();
     if !matches.is_present("quiet") {
         semver.push_str(format!("{}.{}.{} --> ", major, minor, patch).as_str());
