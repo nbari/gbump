@@ -1,6 +1,6 @@
 [package]
 name = "gbump"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Nicolas Embriz <nbari@tequila.io>"]
 description = "Git tag semantic version bumper"
 documentation = "https://github.com/nbari/gbump"
@@ -9,7 +9,7 @@ repository = "https://github.com/nbari/gbump"
 readme = "README.md"
 keywords = ["git", "semver", "bump", "version", "tag"]
 categories = ["command-line-utilities", "os"]
-license-file = "LICENSE"
+license = "BSD-3-Clause"
 edition = "2018"
 
 [badges]

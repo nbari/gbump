@@ -38,13 +38,14 @@ fn main() {
 
     // check if we are in a git repository
     let repo = match env::current_dir() {
-        Ok(path) => match Repository::discover(path) {
-            Ok(repo) => repo,
-            _ => {
+        Ok(path) => {
+            if let Ok(repo) = Repository::discover(path) {
+                repo
+            } else {
                 eprintln!("Not in a git repository");
                 process::exit(1);
             }
-        },
+        }
         e => {
             eprintln!("Could not get current_dir: {:?}", e);
             process::exit(1);
@@ -52,12 +53,11 @@ fn main() {
     };
 
     // find maximum/latest semver
-    let (major, minor, patch) = match tags(&repo) {
-        Ok(tags) => semver(tags),
-        _ => {
-            eprintln!("Could not get tags from repo: git tag -l");
-            process::exit(1);
-        }
+    let (major, minor, patch) = if let Ok(tags) = tags(&repo) {
+        semver(&tags)
+    } else {
+        eprintln!("Could not get tags from repo: git tag -l");
+        process::exit(1);
     };
 
     // prepare the output
@@ -110,10 +110,10 @@ fn tags(repo: &Repository) -> Result<BTreeSet<String>, git2::Error> {
 }
 
 // return current "max" semver
-fn semver(tags: BTreeSet<String>) -> (usize, usize, usize) {
+fn semver(tags: &BTreeSet<String>) -> (usize, usize, usize) {
     let re = Regex::new(SEMVER_RX).unwrap();
     let (mut major, mut minor, mut patch) = (0, 0, 0);
-    for tag in &tags {
+    for tag in tags {
         if let Some(caps) = re.captures(tag) {
             let x = caps["major"].parse::<usize>().unwrap();
             let y = caps["minor"].parse::<usize>().unwrap();
@@ -146,7 +146,7 @@ mod tests {
         tags.insert("1.17.1".to_string());
         tags.insert("2.7.2".to_string());
         tags.insert("0.24.0".to_string());
-        let (major, minor, patch) = semver(tags);
+        let (major, minor, patch) = semver(&tags);
         assert_eq!(major, 3);
         assert_eq!(minor, 7);
         assert_eq!(patch, 0);
@@ -164,7 +164,7 @@ mod tests {
         tags.insert("0.8.3".to_string());
         tags.insert("0.23.0".to_string());
         tags.insert("0.24.0".to_string());
-        let (major, minor, patch) = semver(tags);
+        let (major, minor, patch) = semver(&tags);
         assert_eq!(major, 0);
         assert_eq!(minor, 24);
         assert_eq!(patch, 0);
@@ -183,7 +183,7 @@ mod tests {
         tags.insert("0.23.0".to_string());
         tags.insert("0.24.0".to_string());
         tags.insert("0.99.100".to_string());
-        let (major, minor, patch) = semver(tags);
+        let (major, minor, patch) = semver(&tags);
         assert_eq!(major, 0);
         assert_eq!(minor, 99);
         assert_eq!(patch, 100);
@@ -230,7 +230,7 @@ mod tests {
         tags.insert("0.0.0".to_string());
         tags.insert("1.1.1  1.1".to_string());
         tags.insert("12.1.0---FreeBSD.12.1-RELEASE".to_string());
-        let (major, minor, patch) = semver(tags);
+        let (major, minor, patch) = semver(&tags);
         assert_eq!(major, 12);
         assert_eq!(minor, 1);
         assert_eq!(patch, 0);
