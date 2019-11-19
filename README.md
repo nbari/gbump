@@ -10,7 +10,7 @@ What does it do?
 Will print the current semver version if any and the bumped version.
 If the option `-q` (quiet) is used it will only print the bumped version.
 If the option `-t` (tag) is used then it will create a git tag with the bumped
-version "git tag -a "x.y.z" -m "x.y.z
+version.
 
 How to use it?
 ==============
