@@ -1,6 +1,6 @@
 [package]
 name = "gbump"
-version = "1.0.3"
+version = "1.0.4"
 authors = ["Nicolas Embriz <nbari@tequila.io>"]
 description = "Git tag semantic version bumper"
 documentation = "https://github.com/nbari/gbump"
