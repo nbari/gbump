@@ -46,7 +46,7 @@ fn main() {
                 process::exit(1);
             }
         }
-        e => {
+        Err(e) => {
             eprintln!("Could not get current_dir: {:?}", e);
             process::exit(1);
         }

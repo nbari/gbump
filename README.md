@@ -2,7 +2,7 @@
 Git tag semantic version bumper
 
 [![crates.io](https://img.shields.io/crates/v/gbump.svg)](https://crates.io/crates/gbump)
-[![Build Status](https://travis-ci.org/nbari/gbump.svg?branch=master)](https://travis-ci.org/nbari/gbump)
+[![Build Status](https://github.com/nbari/gbump/workflows/build/badge.svg?branch=master)](https://github.com/nbari/gbump/actions)
 
 What does it do?
 ================
