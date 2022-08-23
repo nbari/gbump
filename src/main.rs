@@ -1,4 +1,4 @@
-use clap::{App, Arg};
+use clap::{Arg, Command};
 use git2::Repository;
 use regex::Regex;
 use std::{collections::BTreeSet, env, process};
@@ -7,11 +7,10 @@ const SEMVER_RX: &str = r"(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patc
 
 fn main() {
     // cli options default to patch
-    let matches = App::new("gbump")
+    let matches = Command::new("gbump")
         .version(env!("CARGO_PKG_VERSION"))
         .arg(
             Arg::with_name("version")
-                .required(true)
                 .takes_value(false)
                 .default_value("patch")
                 .possible_value("major")
