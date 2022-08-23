@@ -23,7 +23,7 @@ fn main() {
                 .required(false)
                 .takes_value(false)
                 .long("quiet")
-                .short("q")
+                .short('q')
                 .help("Prints only the next SemVer not the current one"),
         )
         .arg(
@@ -31,7 +31,7 @@ fn main() {
                 .required(false)
                 .takes_value(false)
                 .long("tag")
-                .short("t")
+                .short('t')
                 .help("Create a semver git tag"),
         )
         .get_matches();
@@ -101,10 +101,8 @@ fn bump(version: &str, major: usize, minor: usize, patch: usize) -> String {
 // return tags found in the repository
 fn tags(repo: &Repository) -> Result<BTreeSet<String>, git2::Error> {
     let mut tags = BTreeSet::new();
-    for name in repo.tag_names(None)?.iter() {
-        if let Some(tag) = name {
-            tags.insert(tag.to_string());
-        }
+    for tag in repo.tag_names(None)?.iter().flatten() {
+        tags.insert(tag.to_string());
     }
     Ok(tags)
 }

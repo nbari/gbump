@@ -1,6 +1,6 @@
 [package]
 name = "gbump"
-version = "1.0.5"
+version = "1.0.6"
 authors = ["Nicolas Embriz <nbari@tequila.io>"]
 description = "Git tag semantic version bumper"
 documentation = "https://github.com/nbari/gbump"
@@ -16,6 +16,6 @@ edition = "2018"
 travis-ci = { repository = "nbari/gbump", branch = "master" }
 
 [dependencies]
-clap = "2.33"
-git2 = "0.13"
-regex = "1.4"
+clap = "3.2"
+git2 = "0.15"
+regex = "1.6"
