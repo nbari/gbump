@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "gbump"
-version = "1.0.7"
+version = "1.0.8"
 dependencies = [
  "clap",
  "git2",
