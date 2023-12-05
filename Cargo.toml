@@ -16,6 +16,6 @@ edition = "2018"
 travis-ci = { repository = "nbari/gbump", branch = "master" }
 
 [dependencies]
-clap = "3"
-git2 = "0.17"
+clap = "4"
+git2 = "0.18"
 regex = "1.8"

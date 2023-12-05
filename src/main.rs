@@ -1,4 +1,7 @@
-use clap::{Arg, Command};
+use clap::{
+    builder::styling::{AnsiColor, Effects, Styles},
+    Arg, ColorChoice, Command,
+};
 use git2::Repository;
 use regex::Regex;
 use std::{collections::BTreeSet, env, process};
@@ -6,45 +9,50 @@ use std::{collections::BTreeSet, env, process};
 const SEMVER_RX: &str = r"(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)";
 
 fn main() {
+    let styles = Styles::styled()
+        .header(AnsiColor::Yellow.on_default() | Effects::BOLD)
+        .usage(AnsiColor::Green.on_default() | Effects::BOLD)
+        .literal(AnsiColor::Blue.on_default() | Effects::BOLD)
+        .placeholder(AnsiColor::Green.on_default());
+
     // cli options default to patch
     let matches = Command::new("gbump")
         .version(env!("CARGO_PKG_VERSION"))
+        .color(ColorChoice::Auto)
+        .styles(styles)
         .arg(
-            Arg::with_name("version")
-                .takes_value(false)
+            Arg::new("version")
                 .default_value("patch")
-                .possible_value("major")
-                .possible_value("minor")
-                .possible_value("patch"),
+                .value_parser(["major", "minor", "patch"])
+                .num_args(0),
         )
         .arg(
-            Arg::with_name("quiet")
+            Arg::new("quiet")
                 .required(false)
-                .takes_value(false)
                 .long("quiet")
                 .short('q')
-                .help("Prints only the next SemVer not the current one"),
+                .help("Prints only the next SemVer not the current one")
+                .num_args(0),
         )
         .arg(
-            Arg::with_name("tag")
+            Arg::new("tag")
                 .required(false)
-                .takes_value(false)
                 .long("tag")
                 .short('t')
-                .help("Create a semver git tag"),
+                .help("Create a semver git tag")
+                .num_args(0),
         )
         .get_matches();
 
     // check if we are in a git repository
     let repo = match env::current_dir() {
-        Ok(path) => {
-            if let Ok(repo) = Repository::discover(path) {
-                repo
-            } else {
+        Ok(path) => Repository::discover(path).map_or_else(
+            |_| {
                 eprintln!("Not in a git repository");
                 process::exit(1);
-            }
-        }
+            },
+            |repo| repo,
+        ),
         Err(e) => {
             eprintln!("Could not get current_dir: {:?}", e);
             process::exit(1);
@@ -52,24 +60,30 @@ fn main() {
     };
 
     // find maximum/latest semver
-    let (major, minor, patch) = if let Ok(tags) = tags(&repo) {
-        semver(&tags)
-    } else {
-        eprintln!("Could not get tags from repo: git tag -l");
-        process::exit(1);
-    };
+    let (major, minor, patch) = tags(&repo).map_or_else(
+        |_| {
+            eprintln!("Could not get tags from repo: git tag -l");
+            process::exit(1);
+        },
+        |tags| semver(&tags),
+    );
 
     // prepare the output
     let mut semver = String::new();
-    if !matches.is_present("quiet") {
+    if !matches.get_one::<bool>("quiet").copied().unwrap_or(false) {
         semver.push_str(format!("{}.{}.{} --> ", major, minor, patch).as_str());
     };
 
-    let bump = bump(matches.value_of("version").unwrap(), major, minor, patch);
+    let bump = bump(
+        matches.get_one::<String>("version").unwrap(),
+        major,
+        minor,
+        patch,
+    );
     semver.push_str(&bump);
     println!("{}", semver);
 
-    if matches.is_present("tag") {
+    if matches.get_one::<bool>("tag").copied().unwrap_or(false) {
         match tag(&repo, bump.as_str(), bump.as_str()) {
             Ok(n) => println!("Tag: {} created: {}", bump, n),
             Err(e) => {
