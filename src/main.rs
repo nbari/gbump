@@ -256,4 +256,9 @@ mod tests {
         assert_eq!(bump("minor", 1, 2, 3), "1.3.0");
         assert_eq!(bump("major", 1, 2, 3), "2.0.0");
     }
+
+    #[test]
+    fn test_bump_invalid() {
+        assert_eq!(bump("foo", 0, 0, 0), "");
+    }
 }
