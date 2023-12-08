@@ -21,10 +21,10 @@ fn main() {
         .color(ColorChoice::Auto)
         .styles(styles)
         .arg(
-            Arg::new("version")
+            Arg::new("bump")
                 .default_value("patch")
                 .value_parser(["major", "minor", "patch"])
-                .num_args(0),
+                .num_args(1),
         )
         .arg(
             Arg::new("quiet")
@@ -75,11 +75,12 @@ fn main() {
     };
 
     let bump = bump(
-        matches.get_one::<String>("version").unwrap(),
+        matches.get_one::<String>("bump").unwrap(),
         major,
         minor,
         patch,
     );
+
     semver.push_str(&bump);
     println!("{}", semver);
 
