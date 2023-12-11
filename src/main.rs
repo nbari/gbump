@@ -28,7 +28,6 @@ fn main() {
         )
         .arg(
             Arg::new("quiet")
-                .required(false)
                 .long("quiet")
                 .short('q')
                 .help("Prints only the next SemVer not the current one")
@@ -36,7 +35,6 @@ fn main() {
         )
         .arg(
             Arg::new("tag")
-                .required(false)
                 .long("tag")
                 .short('t')
                 .help("Create a semver git tag")
@@ -70,6 +68,7 @@ fn main() {
 
     // prepare the output
     let mut semver = String::new();
+
     if !matches.get_one::<bool>("quiet").copied().unwrap_or(false) {
         semver.push_str(format!("{}.{}.{} --> ", major, minor, patch).as_str());
     };
