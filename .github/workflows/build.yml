@@ -1,10 +1,10 @@
 ---
-name: Build
+name: Test & Build
 
 on:
   push:
     branches:
-      - develop
+      - '*'
   workflow_dispatch:
 
 permissions:
@@ -17,7 +17,7 @@ jobs:
       branch: develop
 
   build:
-    name: Build and release
+    name: Build
     runs-on: ${{ matrix.os }}
     needs: test
 
@@ -58,26 +58,12 @@ jobs:
           $env:GITHUB_ENV -Append
         if: matrix.build == 'windows'
 
+      - name: Build Linux
+        run: |
+          cargo build --release --locked --target ${{ matrix.target }} --features "openssl/vendored"
+        if: matrix.build == 'linux'
+
       - name: Build
-        run: cargo build --release --locked --target ${{ matrix.target }}
-
-      - name: Build archive
-        shell: bash
-        run: |-
-          binary_name="gbump"
-
-          dirname="$binary_name-${{ env.VERSION }}-${{ matrix.target }}"
-          mkdir "$dirname"
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            mv "target/${{ matrix.target }}/release/$binary_name.exe" "$dirname"
-          else
-            mv "target/${{ matrix.target }}/release/$binary_name" "$dirname"
-          fi
-
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            7z a "$dirname.zip" "$dirname"
-            echo "ASSET=$dirname.zip" >> $GITHUB_ENV
-          else
-            tar -czf "$dirname.tar.gz" "$dirname"
-            echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
-          fi
+        run: |
+          cargo build --release --locked --target ${{ matrix.target }}
+        if: matrix.build != 'linux'
