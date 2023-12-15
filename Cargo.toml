@@ -12,11 +12,8 @@ categories = ["command-line-utilities", "os"]
 license = "BSD-3-Clause"
 edition = "2018"
 
-[badges]
-travis-ci = { repository = "nbari/gbump", branch = "master" }
-
 [dependencies]
 regex = "1.8"
 clap = "4"
-openssl = { version = "0.10", optional = true, features = ["vendored"] }
+openssl-sys = { version = "0.9", optional = true }
 git2 = "0.18"
