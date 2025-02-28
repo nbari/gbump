@@ -70,7 +70,7 @@ jobs:
       - name: Build
         run: |
           cargo build --release --locked --target ${{ matrix.target }}
-        if: matrix.build != 'linux'
+        if: matrix.build == 'windows'
 
       - name: Build
         run: |
