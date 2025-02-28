@@ -62,6 +62,8 @@ jobs:
           echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
           echo "OPENSSL_LIB_DIR=$(brew --prefix openssl)/lib" >> $GITHUB_ENV
           echo "OPENSSL_INCLUDE_DIR=$(brew --prefix openssl)/include" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$(brew --prefix openssl)/lib/pkgconfig" >> $GITHUB_ENV
+          echo "MACOSX_DEPLOYMENT_TARGET=15.0" >> $GITHUB_ENV
         if: matrix.build == 'macos'
 
       - run: choco install openssl
