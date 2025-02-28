@@ -1,6 +1,6 @@
 use clap::{
-    Arg, ColorChoice, Command,
     builder::styling::{AnsiColor, Effects, Styles},
+    Arg, ColorChoice, Command,
 };
 use git2::Repository;
 use regex::Regex;
