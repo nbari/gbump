@@ -13,8 +13,6 @@ permissions:
 jobs:
   test:
     uses: ./.github/workflows/test.yml
-    with:
-      branch: main
 
   build:
     name: Build and release
@@ -51,6 +49,10 @@ jobs:
       - run: sudo apt -y install musl-dev musl-tools
         if: matrix.build == 'linux'
 
+      - name: Install `cargo-generate-rpm`
+        if: matrix.build == 'linux'
+        run: cargo install cargo-generate-rpm
+
       - run: choco install openssl
         if: matrix.build == 'windows'
 
@@ -62,6 +64,17 @@ jobs:
         run: |
           cargo build --release --locked --target ${{ matrix.target }} --features "openssl/vendored"
         if: matrix.build == 'linux'
+
+      - name: Generate RPM
+        if: matrix.build == 'linux'
+        run: |
+          ls -alR target/${{ matrix.target }}/release/gbump
+          cp target/${{ matrix.target }}/release/gbump ./target/release/gbump
+          strip -s ./target/release/gbump
+          cargo generate-rpm
+          ls -alR target/generate-rpm  # Check where the RPM is generated
+          RPM_PATH=$(find target/generate-rpm/ -name "*.rpm" -print -quit)
+          echo "RPM_ASSET=$RPM_PATH" >> $GITHUB_ENV
 
       - name: Build
         run: |
@@ -95,6 +108,7 @@ jobs:
         with:
           files: |-
             ${{ env.ASSET }}
+            ${{ env.RPM_ASSET }}
 
   publish:
     name: Publish
@@ -111,7 +125,6 @@ jobs:
       - run: cargo publish --token ${CRATES_TOKEN}
         env:
           CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}
-
   package:
     name: PackageCloud
     needs:

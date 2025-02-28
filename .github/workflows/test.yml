@@ -3,11 +3,6 @@ name: Test
 
 on:
   workflow_call:
-    inputs:
-      branch:
-        required: true
-        type: string
-        default: develop
   pull_request:
     branches:
       - '*'
@@ -18,9 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
 
       - name: Format
         run: cargo fmt --all -- --check
@@ -30,8 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Clippy
@@ -42,8 +35,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Check
@@ -66,9 +57,10 @@ jobs:
       - check
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
       - uses: dtolnay/rust-toolchain@stable
+
+      - name: build
+        run: cargo build
 
       - name: test
         run: cargo test
