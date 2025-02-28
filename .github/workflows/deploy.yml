@@ -79,7 +79,12 @@ jobs:
       - name: Build
         run: |
           cargo build --release --locked --target ${{ matrix.target }}
-        if: matrix.build != 'linux'
+        if: matrix.build == 'windows'
+
+      - name: Build
+        run: |
+          cargo build --release --locked
+        if: matrix.build == 'macos'
 
       - name: Build archive
         shell: bash
