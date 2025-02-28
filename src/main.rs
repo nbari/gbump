@@ -1,6 +1,6 @@
 use clap::{
-    builder::styling::{AnsiColor, Effects, Styles},
     Arg, ColorChoice, Command,
+    builder::styling::{AnsiColor, Effects, Styles},
 };
 use git2::Repository;
 use regex::Regex;
@@ -44,13 +44,10 @@ fn main() {
 
     // check if we are in a git repository
     let repo = match env::current_dir() {
-        Ok(path) => Repository::discover(path).map_or_else(
-            |_| {
-                eprintln!("Not in a git repository");
-                process::exit(1);
-            },
-            |repo| repo,
-        ),
+        Ok(path) => Repository::discover(path).unwrap_or_else(|_| {
+            eprintln!("Not in a git repository");
+            process::exit(1);
+        }),
         Err(e) => {
             eprintln!("Could not get current_dir: {:?}", e);
             process::exit(1);
