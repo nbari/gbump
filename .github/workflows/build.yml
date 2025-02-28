@@ -31,8 +31,7 @@ jobs:
             target: x86_64-unknown-linux-musl
 
           - build: macos
-            os: macos-15
-            target: x86_64-apple-darwin
+            os: macos-latest
 
           - build: windows
             os: windows-latest
@@ -72,3 +71,8 @@ jobs:
         run: |
           cargo build --release --locked --target ${{ matrix.target }}
         if: matrix.build != 'linux'
+
+      - name: Build
+        run: |
+          cargo build --release --locked
+        if: matrix.build == 'macos'
