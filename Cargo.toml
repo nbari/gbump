@@ -10,7 +10,7 @@ readme = "README.md"
 keywords = ["git", "semver", "bump", "version", "tag"]
 categories = ["command-line-utilities", "os"]
 license = "BSD-3-Clause"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
 regex = "1.11"
