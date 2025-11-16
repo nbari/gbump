@@ -8,10 +8,11 @@ Git tag semantic version bumper
 What does it do?
 ================
 
-Will print the current semver version if any and the bumped version.
-If the option `-q` (quiet) is used it will only print the bumped version.
-If the option `-t` (tag) is used then it will create a git tag with the bumped
-version.
+`gbump` scans all git tags, finds the highest [SemVer](https://semver.org/)
+value (including prerelease/build metadata), prints the current version, and
+shows the bumped value that would be created next. The tool understands the
+standard `major`, `minor`, and `patch` increments and can optionally create the
+annotated tag for you.
 
 How to use it?
 ==============
@@ -58,3 +59,14 @@ To create a git tag using the latest bump use the flag `-t`:
 
      $ gbump -t minor
      Tag: 0.2.0 created: 5b1eca044a538fd2f74c4f043f28ca4a46b8f7b7
+
+## Environment variables
+
+- `GBUMP_FORCE_TAG_FAILURE=1` &mdash; forces the internal tag lookup to fail.
+  This is mainly useful for tests or CI workflows where you want to confirm the
+  error path.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes. The current release is
+**1.2.0**.

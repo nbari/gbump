@@ -1,12 +1,14 @@
 use clap::{
-    builder::styling::{AnsiColor, Effects, Styles},
     Arg, ColorChoice, Command,
+    builder::styling::{AnsiColor, Effects, Styles},
 };
-use git2::Repository;
+use git2::{Repository, string_array::StringArray};
 use regex::Regex;
+use semver::Version;
 use std::{collections::BTreeSet, env, process};
 
-const SEMVER_RX: &str = r"(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)";
+// matches a SemVer optionally prefixed by v/V and captures the normalized version string
+const SEMVER_RX: &str = r"[vV]?(?P<version>(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)";
 
 fn main() {
     let styles = Styles::styled()
@@ -43,51 +45,38 @@ fn main() {
         .get_matches();
 
     // check if we are in a git repository
-    let repo = match env::current_dir() {
-        Ok(path) => Repository::discover(path).unwrap_or_else(|_| {
-            eprintln!("Not in a git repository");
-            process::exit(1);
-        }),
-        Err(e) => {
-            eprintln!("Could not get current_dir: {:?}", e);
-            process::exit(1);
-        }
-    };
+    let repo = Repository::discover(".").unwrap_or_else(|_| fatal("Not in a git repository"));
 
     // find maximum/latest semver
-    let (major, minor, patch) = tags(&repo).map_or_else(
-        |_| {
-            eprintln!("Could not get tags from repo: git tag -l");
-            process::exit(1);
-        },
+    let version = tags(&repo).map_or_else(
+        |_| fatal("Could not get tags from repo: git tag -l"),
         |tags| semver(&tags),
     );
 
     // prepare the output
     let mut semver = String::new();
 
-    if !matches.get_one::<bool>("quiet").copied().unwrap_or(false) {
-        semver.push_str(format!("{}.{}.{} --> ", major, minor, patch).as_str());
-    };
+    if !matches.get_flag("quiet") {
+        semver.push_str(format!("{version} --> ").as_str());
+    }
 
     let bump = bump(
-        matches.get_one::<String>("bump").unwrap(),
-        major,
-        minor,
-        patch,
-    );
+        matches
+            .get_one::<String>("bump")
+            .expect("clap default ensures value"),
+        &version,
+    )
+    .expect("value parser restricts bump choices");
+    let bump_str = bump.to_string();
 
-    semver.push_str(&bump);
-    println!("{}", semver);
+    semver.push_str(&bump_str);
+    println!("{semver}");
 
-    if matches.get_one::<bool>("tag").copied().unwrap_or(false) {
-        match tag(&repo, bump.as_str(), bump.as_str()) {
-            Ok(n) => println!("Tag: {} created: {}", bump, n),
-            Err(e) => {
-                eprintln!("Could not create tag: {}", e);
-                process::exit(1);
-            }
-        }
+    if matches.get_flag("tag") {
+        tag(&repo, bump_str.as_str(), bump_str.as_str()).map_or_else(
+            |e| fatal(format!("Could not create tag: {e}")),
+            |n| println!("Tag: {bump_str} created: {n}"),
+        );
     }
 }
 
@@ -98,53 +87,68 @@ fn tag(repo: &Repository, tag: &str, message: &str) -> Result<git2::Oid, git2::E
     repo.tag(tag, &obj, &sig, message, false)
 }
 
-// return string containing new semver and optional the current semver
-fn bump(version: &str, major: usize, minor: usize, patch: usize) -> String {
-    match version {
-        "major" => format!("{}.{}.{}", major + 1, 0, 0),
-        "minor" => format!("{}.{}.{}", major, minor + 1, 0),
-        "patch" => format!("{}.{}.{}", major, minor, patch + 1),
-        _ => String::new(),
+// return bumped version or None if the requested bump is invalid
+fn bump(target: &str, version: &Version) -> Option<Version> {
+    match target {
+        "major" => Some(Version::new(version.major + 1, 0, 0)),
+        "minor" => Some(Version::new(version.major, version.minor + 1, 0)),
+        "patch" => Some(Version::new(
+            version.major,
+            version.minor,
+            version.patch + 1,
+        )),
+        _ => None,
     }
 }
 
 // return tags found in the repository
 fn tags(repo: &Repository) -> Result<BTreeSet<String>, git2::Error> {
     let mut tags = BTreeSet::new();
-    for tag in repo.tag_names(None)?.iter().flatten() {
+    for tag in tag_names(repo)?.iter().flatten() {
         tags.insert(tag.to_string());
     }
     Ok(tags)
 }
 
-// return current "max" semver
-fn semver(tags: &BTreeSet<String>) -> (usize, usize, usize) {
+fn tag_names(repo: &Repository) -> Result<StringArray, git2::Error> {
+    if env::var_os("GBUMP_FORCE_TAG_FAILURE").is_some() {
+        Err(git2::Error::from_str("forced tags failure"))
+    } else {
+        repo.tag_names(None)
+    }
+}
+
+// return highest SemVer taking prerelease/build metadata into account
+fn semver(tags: &BTreeSet<String>) -> Version {
     let re = Regex::new(SEMVER_RX).unwrap();
-    let (mut major, mut minor, mut patch) = (0, 0, 0);
+    let mut best: Option<Version> = None;
     for tag in tags {
-        if let Some(caps) = re.captures(tag) {
-            let x = caps["major"].parse::<usize>().unwrap();
-            let y = caps["minor"].parse::<usize>().unwrap();
-            let z = caps["patch"].parse::<usize>().unwrap();
-            if x > major {
-                major = x;
-                minor = y;
-                patch = z;
-            } else if x == major && y > minor {
-                minor = y;
-                patch = z;
-            } else if x == major && y == minor && z > patch {
-                patch = z;
+        for caps in re.captures_iter(tag) {
+            if let Ok(version) = Version::parse(
+                caps.name("version")
+                    .expect("regex ensures version capture")
+                    .as_str(),
+            ) && (best.as_ref().is_none() || version > *best.as_ref().unwrap())
+            {
+                best = Some(version);
             }
         }
     }
-    (major, minor, patch)
+    best.unwrap_or_else(|| Version::new(0, 0, 0))
+}
+
+fn fatal(message: impl AsRef<str>) -> ! {
+    eprintln!("{}", message.as_ref());
+    process::exit(1);
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{bump, semver};
-    use std::collections::BTreeSet;
+    use crate::{bump, semver, tag, tags};
+    use git2::{Repository, Signature};
+    use semver::Version;
+    use std::{collections::BTreeSet, path::Path};
+    use tempfile::TempDir;
 
     #[test]
     fn test_semver_major() {
@@ -154,10 +158,10 @@ mod tests {
         tags.insert("1.17.1".to_string());
         tags.insert("2.7.2".to_string());
         tags.insert("0.24.0".to_string());
-        let (major, minor, patch) = semver(&tags);
-        assert_eq!(major, 3);
-        assert_eq!(minor, 7);
-        assert_eq!(patch, 0);
+        let version = semver(&tags);
+        assert_eq!(version.major, 3);
+        assert_eq!(version.minor, 7);
+        assert_eq!(version.patch, 0);
     }
 
     #[test]
@@ -172,10 +176,10 @@ mod tests {
         tags.insert("0.8.3".to_string());
         tags.insert("0.23.0".to_string());
         tags.insert("0.24.0".to_string());
-        let (major, minor, patch) = semver(&tags);
-        assert_eq!(major, 0);
-        assert_eq!(minor, 24);
-        assert_eq!(patch, 0);
+        let version = semver(&tags);
+        assert_eq!(version.major, 0);
+        assert_eq!(version.minor, 24);
+        assert_eq!(version.patch, 0);
     }
 
     #[test]
@@ -191,10 +195,10 @@ mod tests {
         tags.insert("0.23.0".to_string());
         tags.insert("0.24.0".to_string());
         tags.insert("0.99.100".to_string());
-        let (major, minor, patch) = semver(&tags);
-        assert_eq!(major, 0);
-        assert_eq!(minor, 99);
-        assert_eq!(patch, 100);
+        let version = semver(&tags);
+        assert_eq!(version.major, 0);
+        assert_eq!(version.minor, 99);
+        assert_eq!(version.patch, 100);
     }
 
     #[test]
@@ -238,24 +242,122 @@ mod tests {
         tags.insert("0.0.0".to_string());
         tags.insert("1.1.1  1.1".to_string());
         tags.insert("12.1.0---FreeBSD.12.1-RELEASE".to_string());
-        let (major, minor, patch) = semver(&tags);
-        assert_eq!(major, 12);
-        assert_eq!(minor, 1);
-        assert_eq!(patch, 0);
+        let version = semver(&tags);
+        assert_eq!(version.major, 12);
+        assert_eq!(version.minor, 1);
+        assert_eq!(version.patch, 0);
     }
 
     #[test]
     fn test_bump() {
-        assert_eq!(bump("patch", 0, 0, 0), "0.0.1");
-        assert_eq!(bump("minor", 0, 0, 0), "0.1.0");
-        assert_eq!(bump("major", 0, 0, 0), "1.0.0");
-        assert_eq!(bump("patch", 1, 2, 3), "1.2.4");
-        assert_eq!(bump("minor", 1, 2, 3), "1.3.0");
-        assert_eq!(bump("major", 1, 2, 3), "2.0.0");
+        let base = Version::new(0, 0, 0);
+        assert_eq!(bump("patch", &base).unwrap().to_string(), "0.0.1");
+        assert_eq!(bump("minor", &base).unwrap().to_string(), "0.1.0");
+        assert_eq!(bump("major", &base).unwrap().to_string(), "1.0.0");
+
+        let mixed = Version::new(1, 2, 3);
+        assert_eq!(bump("patch", &mixed).unwrap().to_string(), "1.2.4");
+        assert_eq!(bump("minor", &mixed).unwrap().to_string(), "1.3.0");
+        assert_eq!(bump("major", &mixed).unwrap().to_string(), "2.0.0");
     }
 
     #[test]
     fn test_bump_invalid() {
-        assert_eq!(bump("foo", 0, 0, 0), "");
+        assert!(bump("foo", &Version::new(0, 0, 0)).is_none());
+    }
+
+    #[test]
+    fn test_semver_preserves_metadata() {
+        let mut tags = BTreeSet::<String>::new();
+        tags.insert("release-1.2.3-beta.11+build.5".to_string());
+        let version = semver(&tags);
+        assert_eq!(version.to_string(), "1.2.3-beta.11+build.5");
+    }
+
+    #[test]
+    fn test_semver_prerelease_ordering() {
+        let mut tags = BTreeSet::<String>::new();
+        tags.insert("v1.0.0-alpha".to_string());
+        tags.insert("1.0.0-alpha.1".to_string());
+        tags.insert("1.0.0-alpha.beta".to_string());
+        tags.insert("1.0.0-beta".to_string());
+        tags.insert("1.0.0-beta.2".to_string());
+        tags.insert("1.0.0-beta.11".to_string());
+        tags.insert("1.0.0-rc.1".to_string());
+        let version = semver(&tags);
+        assert_eq!(version.to_string(), "1.0.0-rc.1");
+    }
+
+    #[test]
+    fn test_semver_ignores_invalid_entry() {
+        let mut tags = BTreeSet::<String>::new();
+        tags.insert("99999999999999999999999999999999999.0.0".to_string());
+        tags.insert("0.0.1".to_string());
+        let version = semver(&tags);
+        assert_eq!(version.to_string(), "0.0.1");
+    }
+
+    #[test]
+    fn test_semver_defaults_to_zero() {
+        let tags = BTreeSet::<String>::new();
+        let version = semver(&tags);
+        assert_eq!(version.to_string(), "0.0.0");
+    }
+
+    #[test]
+    fn test_tags_function_reads_git_tags() {
+        let (_tmp, repo) = init_repo();
+        tag(&repo, "1.0.0", "1.0.0").unwrap();
+        tag(&repo, "v1.1.0", "v1.1.0").unwrap();
+        let names = tags(&repo).unwrap();
+        assert!(names.contains("1.0.0"));
+        assert!(names.contains("v1.1.0"));
+    }
+
+    #[test]
+    fn test_tag_function_creates_tag() {
+        let (_tmp, repo) = init_repo();
+        let oid = tag(&repo, "2.0.0", "release").unwrap();
+        let names = repo.tag_names(None).unwrap();
+        assert!(names.iter().flatten().any(|name| name == "2.0.0"));
+        let tag_ref = repo.find_reference("refs/tags/2.0.0").unwrap();
+        assert_eq!(tag_ref.target().unwrap(), oid);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_tags_skips_invalid_utf8_entries() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let (_tmp, repo) = init_repo();
+        tag(&repo, "1.0.0", "1.0.0").unwrap();
+        let bad_name = std::ffi::OsString::from_vec(vec![b'b', 0xFF, b'a', b'd']);
+        let bad_path = repo.path().join("refs").join("tags").join(&bad_name);
+        let head = repo.head().unwrap().target().unwrap();
+        std::fs::write(bad_path, format!("{head}\n")).unwrap();
+        let names = tags(&repo).unwrap();
+        assert!(names.contains("1.0.0"));
+    }
+
+    fn init_repo() -> (TempDir, Repository) {
+        let tmp = TempDir::new().unwrap();
+        let repo = Repository::init(tmp.path()).unwrap();
+        {
+            let mut config = repo.config().unwrap();
+            config.set_str("user.name", "Tester").unwrap();
+            config.set_str("user.email", "tester@example.com").unwrap();
+        }
+        std::fs::write(tmp.path().join("README"), "test").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("README")).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        {
+            let tree = repo.find_tree(tree_id).unwrap();
+            let sig = Signature::now("Tester", "tester@example.com").unwrap();
+            repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
+                .unwrap();
+        }
+        (tmp, repo)
     }
 }
