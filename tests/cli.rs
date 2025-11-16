@@ -98,6 +98,7 @@ fn cli_errors_when_tags_are_forced_to_fail() {
     );
 }
 
+#[cfg_attr(not(unix), ignore = "uses HOME-based git config resolution")]
 #[test]
 fn cli_tagging_without_identity_fails() {
     let fixture = RepoFixture::with_commit_without_identity();
