@@ -1,2 +1,13 @@
-/target
+/target/
 **/*.rs.bk
+.DS_Store
+.claude/
+.copilot/
+.cursor/
+.idea/
+.vscode/
+.codexrc
+
+# Built crate generates this at compile time
+built.rs
+.envrc
