@@ -65,8 +65,3 @@ To create a git tag using the latest bump use the flag `-t`:
 - `GBUMP_FORCE_TAG_FAILURE=1` &mdash; forces the internal tag lookup to fail.
   This is mainly useful for tests or CI workflows where you want to confirm the
   error path.
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for release notes. The current release is
-**1.2.0**.

@@ -21,7 +21,8 @@ jobs:
   build:
     name: Build
     runs-on: ${{ matrix.os }}
-    needs: test
+    needs:
+      - test
 
     strategy:
       matrix:
@@ -32,6 +33,7 @@ jobs:
 
           - build: macos
             os: macos-latest
+            target: x86_64-apple-darwin
 
           - build: windows
             os: windows-latest
@@ -39,7 +41,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      - name: Get package name from Cargo.toml
+        id: package
+        shell: bash
+        run: |
+          PACKAGE_NAME=$(awk -F '"' '/^name = / {print $2; exit}' Cargo.toml)
+          echo "name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+          echo "Package name: $PACKAGE_NAME"
 
       - name: Branch name
         run: echo "${GITHUB_REF##*/}"
@@ -62,17 +72,11 @@ jobs:
           $env:GITHUB_ENV -Append
         if: matrix.build == 'windows'
 
-      - name: Build Linux
-        run: |
-          cargo build --release --locked --target ${{ matrix.target }} --features musl
+      - name: Build (Linux musl)
         if: matrix.build == 'linux'
+        run: cargo build --release --locked --target ${{ matrix.target }} --features
+          musl
 
       - name: Build
-        run: |
-          cargo build --release --locked --target ${{ matrix.target }}
-        if: matrix.build == 'windows'
-
-      - name: Build
-        run: |
-          cargo build --release --locked
-        if: matrix.build == 'macos'
+        if: matrix.build != 'linux'
+        run: cargo build --release --locked --target ${{ matrix.target }}

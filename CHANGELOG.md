@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.2.0] - 2025-01-06
+## [1.2.0] - 2025-11-16
 
 - Switch SemVer handling to the `semver` crate so prerelease/build metadata is preserved and ordering follows the spec.
 - Add integration tests that exercise the CLI end-to-end, including quiet mode, tagging, identity errors, and forced tag failures.
