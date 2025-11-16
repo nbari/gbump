@@ -12,6 +12,20 @@ categories = ["command-line-utilities", "development-tools::version-control"]
 license = "BSD-3-Clause"
 edition = "2024"
 
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/gbump", dest = "/usr/bin/gbump", mode = "755" },
+]
+
+[package.metadata.deb]
+maintainer = "Nicolas Embriz <nbari@tequila.io>"
+depends = "$auto"
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/gbump", "/usr/bin/gbump", "755"],
+]
+
 [features]
 default = []
 musl = ["openssl/vendored"]
