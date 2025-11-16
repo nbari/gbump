@@ -8,7 +8,7 @@ homepage = "https://github.com/nbari/gbump"
 repository = "https://github.com/nbari/gbump"
 readme = "README.md"
 keywords = ["git", "semver", "cli", "versioning", "release"]
-categories = ["command-line-utilities", "development-tools::version-control"]
+categories = ["command-line-utilities", "development-tools"]
 license = "BSD-3-Clause"
 edition = "2024"
 
