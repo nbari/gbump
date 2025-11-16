@@ -324,7 +324,7 @@ mod tests {
         assert_eq!(tag_ref.target().unwrap(), oid);
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_vendor = "apple")))]
     #[test]
     fn test_tags_skips_invalid_utf8_entries() {
         use std::os::unix::ffi::OsStringExt;
