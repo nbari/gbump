@@ -12,15 +12,10 @@ categories = ["command-line-utilities", "development-tools"]
 license = "BSD-3-Clause"
 edition = "2024"
 
-[features]
-default = []
-musl = ["openssl/vendored"]
-
 [dependencies]
 regex = "1.11"
 clap = "4"
-openssl = { version = "0.10", optional = true, features = ["vendored"] }
-git2 = "0.20"
+git2 = { version = "0.20", default-features = false }
 semver = "1.0"
 
 [dev-dependencies]
@@ -39,6 +34,6 @@ assets = [
 
 [package.metadata.deb]
 assets = [
-  ["target/release/gbump", "/usr/bin/cron-when", "755"],
+  ["target/release/gbump", "/usr/local/bin/gbump", "755"],
 ]
 depends = ""
