@@ -1,11 +1,11 @@
 use clap::{
-    Arg, ColorChoice, Command,
+    Arg, ArgAction, ColorChoice, Command,
     builder::styling::{AnsiColor, Effects, Styles},
 };
 use git2::{Repository, string_array::StringArray};
 use regex::Regex;
 use semver::Version;
-use std::{collections::BTreeSet, env, process};
+use std::{collections::BTreeSet, env, ffi::OsString, process};
 
 // matches a SemVer optionally prefixed by v/V and captures the normalized version string
 const SEMVER_RX: &str = r"[vV]?(?P<version>(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)";
@@ -18,6 +18,17 @@ fn main() {
         .placeholder(AnsiColor::Green.on_default());
 
     // cli options default to patch
+    // normalize argv so "-ts"/"-st" map to the signed flag instead of combining shorts
+    let normalized_args: Vec<OsString> = env::args_os()
+        .map(|arg| {
+            if arg == "-ts" || arg == "-st" {
+                OsString::from("--tag-signed")
+            } else {
+                arg
+            }
+        })
+        .collect();
+
     let matches = Command::new("gbump")
         .version(env!("CARGO_PKG_VERSION"))
         .color(ColorChoice::Auto)
@@ -40,9 +51,26 @@ fn main() {
                 .long("tag")
                 .short('t')
                 .help("Create a semver git tag")
-                .num_args(0),
+                .num_args(0)
+                .action(ArgAction::Count),
         )
-        .get_matches();
+        .arg(
+            Arg::new("tag_signed")
+                .long("tag-signed")
+                .short('s')
+                .help("Create a signed semver git tag (equivalent to git tag -s)")
+                .num_args(0)
+                .action(ArgAction::Count),
+        )
+        .arg(
+            Arg::new("signer")
+                .long("signer")
+                .help("Signing key to use with --tag-signed")
+                .value_name("KEY")
+                .requires("tag_signed"),
+        )
+        .try_get_matches_from(normalized_args)
+        .unwrap_or_else(|e| e.exit());
 
     // check if we are in a git repository
     let repo = Repository::discover(".").unwrap_or_else(|_| fatal("Not in a git repository"));
@@ -72,8 +100,20 @@ fn main() {
     semver.push_str(&bump_str);
     println!("{semver}");
 
-    if matches.get_flag("tag") {
-        tag(&repo, bump_str.as_str(), bump_str.as_str()).map_or_else(
+    let tag_flag = matches.get_count("tag") > 0;
+    let signed_tag = matches.get_count("tag_signed") > 0;
+    if tag_flag && signed_tag {
+        fatal("cannot combine --tag and --tag-signed; choose one");
+    }
+
+    let signer = matches.get_one::<String>("signer").map(|s| s.as_str());
+    if tag_flag || signed_tag {
+        let result = if signed_tag {
+            tag_signed(&repo, bump_str.as_str(), bump_str.as_str(), signer)
+        } else {
+            tag(&repo, bump_str.as_str(), bump_str.as_str())
+        };
+        result.map_or_else(
             |e| fatal(format!("Could not create tag: {e}")),
             |n| println!("Tag: {bump_str} created: {n}"),
         );
@@ -85,6 +125,58 @@ fn tag(repo: &Repository, tag: &str, message: &str) -> Result<git2::Oid, git2::E
     let obj = repo.revparse_single("HEAD")?;
     let sig = repo.signature()?;
     repo.tag(tag, &obj, &sig, message, false)
+}
+
+// create a signed tag via the git CLI to allow GPG-backed signatures
+fn tag_signed(
+    repo: &Repository,
+    tag: &str,
+    message: &str,
+    signer: Option<&str>,
+) -> Result<git2::Oid, git2::Error> {
+    let git_dir = repo.path();
+    let workdir = repo.workdir().unwrap_or(git_dir);
+    let config = repo.config()?;
+
+    let mut cmd = process::Command::new("git");
+    cmd.current_dir(workdir).env("GIT_DIR", git_dir);
+
+    if let Some(fake_gpg_log) = env::var_os("GBUMP_FAKE_GPG_LOG") {
+        cmd.env("GBUMP_FAKE_GPG_LOG", fake_gpg_log);
+    }
+
+    if let Ok(program) = config.get_string("gpg.program") {
+        cmd.arg("-c");
+        cmd.arg(format!("gpg.program={program}"));
+    }
+
+    if let Ok(format) = config.get_string("gpg.format") {
+        cmd.arg("-c");
+        cmd.arg(format!("gpg.format={format}"));
+    }
+
+    if let Some(signer) = signer {
+        cmd.arg("-c");
+        cmd.arg(format!("user.signingkey={signer}"));
+    }
+
+    cmd.args(["tag", "-s", tag, "-m", message]);
+
+    let output = cmd
+        .output()
+        .map_err(|e| git2::Error::from_str(&format!("failed to run git tag -s: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(git2::Error::from_str(&format!(
+            "git tag -s failed: {stderr}"
+        )));
+    }
+
+    let reference = repo.find_reference(&format!("refs/tags/{tag}"))?;
+    reference
+        .target()
+        .ok_or_else(|| git2::Error::from_str("created signed tag missing target"))
 }
 
 // return bumped version or None if the requested bump is invalid
@@ -322,6 +414,18 @@ mod tests {
         assert!(names.iter().flatten().any(|name| name == "2.0.0"));
         let tag_ref = repo.find_reference("refs/tags/2.0.0").unwrap();
         assert_eq!(tag_ref.target().unwrap(), oid);
+    }
+
+    #[test]
+    fn test_tag_function_rejects_existing_tag() {
+        let (_tmp, repo) = init_repo();
+        tag(&repo, "1.0.0", "1.0.0").unwrap();
+        let err = tag(&repo, "1.0.0", "1.0.0").unwrap_err();
+        assert!(
+            err.message().to_lowercase().contains("exist"),
+            "expected duplicate tag error, got: {}",
+            err.message()
+        );
     }
 
     #[cfg(all(unix, not(target_vendor = "apple")))]

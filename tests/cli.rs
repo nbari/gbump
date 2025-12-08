@@ -1,9 +1,13 @@
 use git2::{Commit, ObjectType, Repository, Signature};
 use std::{
+    fs,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
 use tempfile::TempDir;
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 #[test]
 fn cli_prints_current_and_next_version() {
@@ -54,6 +58,95 @@ fn cli_creates_tag_when_flag_is_set() {
     assert!(
         tags.iter().flatten().any(|name| name == "0.0.1"),
         "expected tag 0.0.1 to exist"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn cli_creates_signed_tag_when_flag_is_set() {
+    let fixture = RepoFixture::with_commit();
+    install_fake_gpg(&fixture, None);
+
+    let output = run_gbump_with(fixture.path(), &["-ts"], |cmd| {
+        cmd.env("GIT_CONFIG_NOSYSTEM", "1");
+        cmd.env("GIT_CONFIG_GLOBAL", "/dev/null");
+        cmd.env("HOME", fixture.path());
+        cmd.env("GBUMP_FAKE_GPG_LOG", fixture.path().join("signed-gpg.log"));
+    });
+    assert!(
+        output.status.success(),
+        "gbump should succeed when signing tag: stderr={}",
+        stderr(&output)
+    );
+    let repo = Repository::open(fixture.path()).unwrap();
+    let tag_ref = repo.find_reference("refs/tags/0.0.1").unwrap();
+    assert!(tag_ref.target().is_some(), "signed tag ref missing target");
+
+    let gpg_log = std::fs::read_to_string(fixture.path().join("signed-gpg.log"))
+        .expect("expected fake gpg to be called");
+    assert!(
+        !gpg_log.is_empty(),
+        "fake gpg should record signing invocation"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn cli_signed_tag_uses_custom_signer() {
+    let fixture = RepoFixture::with_commit();
+    let gpg_log = fixture.path().join("signed-args.log");
+    install_fake_gpg(&fixture, Some(&gpg_log));
+
+    let output = run_gbump_with(
+        fixture.path(),
+        &["-ts", "--signer", "Custom Key <custom@example.com>"],
+        |cmd| {
+            cmd.env("GIT_CONFIG_NOSYSTEM", "1");
+            cmd.env("GIT_CONFIG_GLOBAL", "/dev/null");
+            cmd.env("HOME", fixture.path());
+            cmd.env("GBUMP_FAKE_GPG_LOG", &gpg_log);
+        },
+    );
+    assert!(
+        output.status.success(),
+        "gbump should succeed when signing tag with custom signer: stderr={}",
+        stderr(&output)
+    );
+
+    let args_logged = fs::read_to_string(&gpg_log).unwrap_or_default();
+    assert!(
+        args_logged.contains("Custom Key <custom@example.com>"),
+        "expected fake gpg to receive custom signer, got: {args_logged}"
+    );
+}
+
+#[test]
+fn cli_signer_requires_tag_signed_flag() {
+    let fixture = RepoFixture::with_commit();
+    let output = run_gbump(fixture.path(), &["--signer", "Some Key"]);
+    assert!(
+        !output.status.success(),
+        "gbump should fail when --signer is provided without --tag-signed"
+    );
+    assert!(
+        stderr(&output).contains("--tag-signed"),
+        "expected clap to mention --tag-signed requirement, got: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn cli_rejects_conflicting_tag_flags() {
+    let fixture = RepoFixture::with_commit();
+    let output = run_gbump(fixture.path(), &["-t", "-ts"]);
+    assert!(
+        !output.status.success(),
+        "gbump should fail when conflicting tag flags are provided"
+    );
+    assert!(
+        stderr(&output).contains("cannot combine"),
+        "expected conflict message, got: {}",
+        stderr(&output)
     );
 }
 
@@ -225,4 +318,77 @@ fn configure_identity(repo: &Repository) {
     let mut config = repo.config().unwrap();
     config.set_str("user.name", "Tester").unwrap();
     config.set_str("user.email", "tester@example.com").unwrap();
+}
+
+#[cfg(unix)]
+fn install_fake_gpg(fixture: &RepoFixture, log_path: Option<&Path>) -> PathBuf {
+    let fake_gpg = fixture.path().join("fake-gpg.sh");
+    let log_block = log_path.map_or(String::new(), |path| {
+        format!(
+            "LOG_PATH=\"{}\"\nif [ -n \"$LOG_PATH\" ]; then\n    echo \"$@\" >>\"$LOG_PATH\"\nfi\n\n",
+            path.display()
+        )
+    });
+    let script_body = r#"output=""
+status_fd=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --output=*)
+            output="${1#--output=}"
+            shift
+            ;;
+        --output|-o)
+            output="$2"
+            shift 2
+            ;;
+        -o*)
+            output="${1#-o}"
+            shift
+            ;;
+        --status-fd=*)
+            status_fd="${1#--status-fd=}"
+            shift
+            ;;
+        --status-fd)
+            status_fd="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+cat >/dev/null
+if [ -z "$output" ]; then
+    printf "FAKE SIGNATURE\n"
+else
+    printf "FAKE SIGNATURE\n" >"$output"
+fi
+if [ -n "$status_fd" ]; then
+    # shellcheck disable=SC3037
+    printf "[GNUPG:] SIG_CREATED D 0 0 00 0 0\n" >&"$status_fd"
+fi
+if [ -n "$GBUMP_FAKE_GPG_LOG" ]; then
+    echo "$@" >>"$GBUMP_FAKE_GPG_LOG"
+fi
+"#;
+    let script = format!("#!/bin/sh\n\n{log_block}{script_body}");
+    fs::write(&fake_gpg, script).unwrap();
+    let mut perms = fs::metadata(&fake_gpg).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&fake_gpg, perms).unwrap();
+
+    let mut config = fixture.repo().config().unwrap();
+    config
+        .set_str("gpg.program", fake_gpg.to_str().unwrap())
+        .unwrap();
+    config.set_str("gpg.format", "openpgp").unwrap();
+    config.set_str("user.signingkey", "dummy").unwrap();
+
+    if let Some(log) = log_path {
+        fs::write(log, "").unwrap();
+    }
+
+    fake_gpg
 }

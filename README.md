@@ -60,6 +60,16 @@ To create a git tag using the latest bump use the flag `-t`:
      $ gbump -t minor
      Tag: 0.2.0 created: 5b1eca044a538fd2f74c4f043f28ca4a46b8f7b7
 
+## --tag-signed / -ts (git tag -s X.Y.Z -m "X.Y.Z")
+
+Use `-ts` to create a GPG-signed tag instead of the default annotated tag:
+
+     $ gbump -ts patch
+     Tag: 0.0.1 created: <oid>
+
+The command shells out to `git tag -s`, so make sure your signing key and
+`gpg.program` are configured in the repository or environment.
+
 ## Environment variables
 
 - `GBUMP_FORCE_TAG_FAILURE=1` &mdash; forces the internal tag lookup to fail.
